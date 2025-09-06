@@ -1,0 +1,190 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Call Leaderboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+        #leaderboard {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        #leaderboard th, #leaderboard td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        #leaderboard th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #leaderboard tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        #countdown {
+            font-size: 24px;
+            color: #d32f2f;
+            margin: 20px 0;
+        }
+        #update-form {
+            margin: 20px 0;
+        }
+        #update-form input, #update-form button {
+            padding: 8px;
+            margin: 5px;
+        }
+        #update-form button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #update-form button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Team Call Leaderboard</h1>
+        <div id="countdown">Time Remaining: Calculating...</div>
+        <table id="leaderboard">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Calls Made</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+        </table>
+        <div id="update-form">
+            <input type="text" id="name-input" placeholder="Enter name">
+            <input type="number" id="calls-input" placeholder="Enter calls" min="0">
+            <button onclick="updateLeaderboard()">Update</button>
+        </div>
+    </div>
+
+    <script>
+        // Sample team data (can be modified or loaded from a server)
+        let teamData = [
+            { name: "Alice", calls: 0 },
+            { name: "Bob", calls: 0 },
+            { name: "Charlie", calls: 0 }
+        ];
+
+        // Countdown timer settings (e.g., 8 hours from now)
+        const endTime = new Date().getTime() + 8 * 60 * 60 * 1000;
+
+        // Function to update the leaderboard display
+        function renderLeaderboard() {
+            const leaderboardBody = document.getElementById('leaderboard-body');
+            leaderboardBody.innerHTML = '';
+            teamData.sort((a, b) => b.calls - a.calls); // Sort by calls descending
+            teamData.forEach(member => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${member.name}</td><td>${member.calls}</td>`;
+                leaderboardBody.appendChild(row);
+            });
+        }
+
+        // Function to update countdown timer
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const timeLeft = endTime - now;
+            if (timeLeft <= 0) {
+                document.getElementById('countdown').innerText = 'Time is up!';
+                return;
+            }
+            const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+            document.getElementById('countdown').innerText = 
+                `Time Remaining: ${hours}h ${minutes}m ${seconds}s`;
+        }
+
+        // Function to handle leaderboard updates
+        function updateLeaderboard() {
+            const nameInput = document.getElementById('name-input').value.trim();
+            const callsInput = parseInt(document.getElementById('calls-input').value);
+            if (nameInput && !isNaN(callsInput) && callsInput >= 0) {
+                const member = teamData.find(m => m.name.toLowerCase() === nameInput.toLowerCase());
+                if (member) {
+                    member.calls = callsInput;
+                } else {
+                    teamData.push({ name: nameInput, calls: callsInput });
+                }
+                renderLeaderboard();
+                document.getElementById('name-input').value = '';
+                document.getElementById('calls-input').value = '';
+            } else {
+                alert('Please enter a valid name and number of calls.');
+            }
+        }
+
+        // Initial render and set interval for countdown
+        renderLeaderboard();
+        setInterval(updateCountdown, 1000);
+
+        // Allow Enter key to submit updates
+        document.getElementById('calls-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                updateLeaderboard();
+            }
+        });
+    </script>
+</body>
+</html>
